@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Transpile the shared TypeScript package (it ships raw .ts source).
+  transpilePackages: ["@rubies/shared"],
 };
 
 export default nextConfig;

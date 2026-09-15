@@ -1,0 +1,19 @@
+{
+  "name": "rubies-management-system",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Rubies Code School management system — Student mobile app (Expo) + Trainer/Admin web (Next.js) + shared contract.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "mobile": "npm run start --workspace mobile",
+    "web": "npm run dev --workspace web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
