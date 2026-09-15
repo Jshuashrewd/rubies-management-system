@@ -1,26 +1,97 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Rubies Code School — design tokens, mirrored from `@rubies/shared`'s
+ * `tokens.ts` (the source of truth). Keep these two files in sync by hand:
+ * this package has no build step, so Tailwind can't read the .ts file
+ * directly.
+ */
+@theme {
+  /* Structure — deep purple masses anchor nav, headers, structural panels. */
+  --color-primary: #2b1450;
+  --color-primary-hover: #3c1d6e;
+  --color-primary-container: #120031;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Spotlight CTA — the single most important action per screen ONLY. */
+  --color-accent: #ff7a29;
+  --color-accent-hover: #e86517;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Text */
+  --color-text-primary: #1a102e;
+  --color-text-secondary: #5c5470;
+
+  /* Borders / dividers */
+  --color-border: #e2dfea;
+  --color-border-strong: #d5d0e3;
+
+  /* Surfaces */
+  --color-canvas: #ffffff;
+  --color-canvas-tint: #f7f5fa;
+
+  /* Semantic suite */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  /* Role badges */
+  --color-role-student-bg: #f0ecf8;
+  --color-role-student-text: #2b1450;
+  --color-role-trainer-bg: #ecfdf5;
+  --color-role-trainer-text: #047857;
+  --color-role-admin-bg: #1a102e;
+  --color-role-admin-text: #ffffff;
+
+  /* Type — display (headlines), body (copy/labels), mono (ids/credentials).
+     Font faces are loaded via next/font/google in app/layout.tsx, which
+     exposes each family through the CSS variable referenced below. */
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  /* Type scale (desktop values from tokens.ts; mobile-specific sizes are
+     omitted since this app is desktop/responsive web, not RN). */
+  --text-display-lg: 3rem;
+  --text-headline-lg: 2rem;
+  --text-headline-md: 1.5rem;
+  --text-headline-sm: 1.25rem;
+  --text-title-lg: 1.125rem;
+  --text-title-md: 1rem;
+  --text-body-lg: 1rem;
+  --text-body-md: 0.875rem;
+  --text-body-sm: 0.75rem;
+  --text-label-lg: 0.875rem;
+  --text-label-md: 0.75rem;
+  --text-label-sm: 0.6875rem;
+
+  /* Spacing — 8-point-ish scale. Named alongside (not replacing) Tailwind's
+     default numeric scale, so both `p-4` and `p-md` resolve. */
+  --spacing-2xs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+
+  /* Radius — disciplined, compact ("soft architectural geometry"). Overrides
+     Tailwind's default radius scale so `rounded-*` follows the brand scale. */
+  --radius-sm: 2px;
+  --radius-base: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas-tint);
+  color: var(--color-text-primary);
+}
+
+/* Structural containment over floaty shadows: every interactive element
+   gets a visible focus ring instead of relying on color/shadow alone. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }

@@ -54,14 +54,14 @@ This is a **2-week competition build**. The design deliberately favors a small, 
 
 ### 1.4 Glossary
 
-| Term | Meaning |
-|---|---|
-| **School ID** | Human-readable identity of the form `RCS-[ROLE]-[YEAR]-[IDENTIFIER]`, e.g. `RCS-STU-2025-884`. Used as the login username. |
-| **Strict Mode** | An **app-based** focus lock that keeps a student on the live class. In-app full-screen overlay — *not* an OS/kiosk lock. |
-| **Contract** | `packages/shared/src/types.ts` + `api.ts` — the typed source of truth for everything exchanged between clients and backend. |
-| **Surface** | A distinct client experience: Student mobile, Trainer web, Admin web. |
-| **Guardian** | Parent/guardian who receives post-class reports and can hold the Strict Mode passcode. |
-| **Join event** | Attendance signal recorded when a student taps "Join on Zoom". |
+| Term            | Meaning                                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **School ID**   | Human-readable identity of the form `RCS-[ROLE]-[YEAR]-[IDENTIFIER]`, e.g. `RCS-STU-2025-884`. Used as the login username.  |
+| **Strict Mode** | An **app-based** focus lock that keeps a student on the live class. In-app full-screen overlay — _not_ an OS/kiosk lock.    |
+| **Contract**    | `packages/shared/src/types.ts` + `api.ts` — the typed source of truth for everything exchanged between clients and backend. |
+| **Surface**     | A distinct client experience: Student mobile, Trainer web, Admin web.                                                       |
+| **Guardian**    | Parent/guardian who receives post-class reports and can hold the Strict Mode passcode.                                      |
+| **Join event**  | Attendance signal recorded when a student taps "Join on Zoom".                                                              |
 
 ---
 
@@ -183,20 +183,20 @@ sequenceDiagram
 
 ## 5. Technology stack
 
-| Concern | Choice | Version (installed) | Notes |
-|---|---|---|---|
-| Language | TypeScript | ~6.0 (mobile), ^5.6 (shared), ^5 (web) | `strict`, `noUncheckedIndexedAccess`. |
-| Monorepo | npm workspaces | npm 11.6 / Node ≥20 (dev on 24) | `packages/*`, `apps/*`. |
-| Mobile runtime | Expo SDK / React Native | 57 / 0.86.3 | New architecture, React Compiler on. |
-| Mobile routing | expo-router | ~57.0.20 | File-based, typed routes. |
-| Mobile storage | expo-secure-store | ~57.0.3 | Encrypted token storage. |
-| Mobile notifications | expo-notifications | ~57.0.17 | Local `DATE`-trigger reminders. |
-| Web framework | Next.js (App Router) | 16.3.4 | React 19.2.8; async `params`/`searchParams`; `LayoutProps`/`PageProps` typed helpers. |
-| Web styling | Tailwind CSS | v4 | CSS-first (`@import "tailwindcss"`, `@theme`), no `tailwind.config.js`. |
-| Server state | @tanstack/react-query | ^5.62 | Both apps. |
-| React | React / React DOM | 19.2.x | Both apps. |
+| Concern              | Choice                  | Version (installed)                    | Notes                                                                                 |
+| -------------------- | ----------------------- | -------------------------------------- | ------------------------------------------------------------------------------------- |
+| Language             | TypeScript              | ~6.0 (mobile), ^5.6 (shared), ^5 (web) | `strict`, `noUncheckedIndexedAccess`.                                                 |
+| Monorepo             | npm workspaces          | npm 11.6 / Node ≥20 (dev on 24)        | `packages/*`, `apps/*`.                                                               |
+| Mobile runtime       | Expo SDK / React Native | 57 / 0.86.3                            | New architecture, React Compiler on.                                                  |
+| Mobile routing       | expo-router             | ~57.0.20                               | File-based, typed routes.                                                             |
+| Mobile storage       | expo-secure-store       | ~57.0.3                                | Encrypted token storage.                                                              |
+| Mobile notifications | expo-notifications      | ~57.0.17                               | Local `DATE`-trigger reminders.                                                       |
+| Web framework        | Next.js (App Router)    | 16.3.4                                 | React 19.2.8; async `params`/`searchParams`; `LayoutProps`/`PageProps` typed helpers. |
+| Web styling          | Tailwind CSS            | v4                                     | CSS-first (`@import "tailwindcss"`, `@theme`), no `tailwind.config.js`.               |
+| Server state         | @tanstack/react-query   | ^5.62                                  | Both apps.                                                                            |
+| React                | React / React DOM       | 19.2.x                                 | Both apps.                                                                            |
 
-> **Version discipline:** `apps/mobile/AGENTS.md` and `apps/web/AGENTS.md` require reading the *installed* versioned docs before writing code (Expo v57 docs; Next.js docs bundled under `node_modules/next/dist/docs/`). Both frameworks have breaking changes vs. older mental models.
+> **Version discipline:** `apps/mobile/AGENTS.md` and `apps/web/AGENTS.md` require reading the _installed_ versioned docs before writing code (Expo v57 docs; Next.js docs bundled under `node_modules/next/dist/docs/`). Both frameworks have breaking changes vs. older mental models.
 
 ---
 
@@ -323,30 +323,36 @@ erDiagram
 - **Content:** JSON request/response. `204` → empty body.
 - **Errors:** non-2xx returns the **`ApiErrorBody`** envelope:
   ```json
-  { "error": { "code": "validation_error", "message": "…", "details": { "field": "…" } } }
+  {
+    "error": {
+      "code": "validation_error",
+      "message": "…",
+      "details": { "field": "…" }
+    }
+  }
   ```
   Error `code` ∈ `unauthorized | forbidden | not_found | validation_error | invalid_credentials | password_change_required | server_error`.
 - **`401` semantics:** any `401` triggers the client's `onUnauthorized()` → clear token → return to login.
 
 ### 9.2 Endpoint catalog (as typed in `api.ts`)
 
-| Namespace | Method & path | Body → Response | Used by |
-|---|---|---|---|
-| **auth** | `POST /auth/login` | `LoginRequest` → `LoginResponse` | both |
-| | `POST /auth/change-password` | `ChangePasswordRequest` → `ChangePasswordResponse` | both |
-| **me** | `GET /me` | → `User` | both |
-| **schedule** | `GET /schedule` | → `ClassSession[]` | both |
-| | `GET /classes/:id` | → `ClassSession` | both |
-| **curriculum** | `GET /curriculum/stages` | → `CurriculumStage[]` | both |
-| | `GET /curriculum/progress[?studentId]` | → `CurriculumProgress` | student (self) / trainer (by id) |
-| **students** | `GET /trainer/students` | → `Student[]` | trainer |
-| | `GET /students/:id` | → `Student` | trainer |
-| **reports** | `POST /reports` | `CreateReportInput` → `Report` | trainer |
-| | `GET /reports[?studentId&classId]` | → `Report[]` | trainer |
-| **events** | `POST /events/join` | `LogJoinInput` → `JoinEvent` | student |
-| | `POST /events/strict-mode/activate` | `StrictModeActivateInput` → `StrictModeEvent` | student |
-| | `POST /events/strict-mode/release` | `StrictModeReleaseInput` → `StrictModeEvent` | student |
-| **strictMode** | `POST /strict-mode/verify-passcode` | `VerifyPasscodeInput` → `VerifyPasscodeResponse` | student |
+| Namespace      | Method & path                          | Body → Response                                    | Used by                          |
+| -------------- | -------------------------------------- | -------------------------------------------------- | -------------------------------- |
+| **auth**       | `POST /auth/login`                     | `LoginRequest` → `LoginResponse`                   | both                             |
+|                | `POST /auth/change-password`           | `ChangePasswordRequest` → `ChangePasswordResponse` | both                             |
+| **me**         | `GET /me`                              | → `User`                                           | both                             |
+| **schedule**   | `GET /schedule`                        | → `ClassSession[]`                                 | both                             |
+|                | `GET /classes/:id`                     | → `ClassSession`                                   | both                             |
+| **curriculum** | `GET /curriculum/stages`               | → `CurriculumStage[]`                              | both                             |
+|                | `GET /curriculum/progress[?studentId]` | → `CurriculumProgress`                             | student (self) / trainer (by id) |
+| **students**   | `GET /trainer/students`                | → `Student[]`                                      | trainer                          |
+|                | `GET /students/:id`                    | → `Student`                                        | trainer                          |
+| **reports**    | `POST /reports`                        | `CreateReportInput` → `Report`                     | trainer                          |
+|                | `GET /reports[?studentId&classId]`     | → `Report[]`                                       | trainer                          |
+| **events**     | `POST /events/join`                    | `LogJoinInput` → `JoinEvent`                       | student                          |
+|                | `POST /events/strict-mode/activate`    | `StrictModeActivateInput` → `StrictModeEvent`      | student                          |
+|                | `POST /events/strict-mode/release`     | `StrictModeReleaseInput` → `StrictModeEvent`       | student                          |
+| **strictMode** | `POST /strict-mode/verify-passcode`    | `VerifyPasscodeInput` → `VerifyPasscodeResponse`   | student                          |
 
 ### 9.3 Contract governance
 
@@ -387,7 +393,7 @@ sequenceDiagram
 
 - **Token** is a JWT bearer, persisted per app:
   - **Mobile:** `expo-secure-store` (encrypted), key `rubies.token`.
-  - **Web:** `localStorage` via the auth provider (SPA-style). *Trade-off noted in [§16](#16-security-considerations).*
+  - **Web:** `localStorage` via the auth provider (SPA-style). _Trade-off noted in [§16](#16-security-considerations)._
 - On boot, each app **bootstraps** from stored token → `GET /me`. Failure clears the token and routes to login.
 
 ### 10.3 Authorization
@@ -524,7 +530,7 @@ Derived from the Stitch "Rubies Code School" designs, distilled to a shippable t
   - `roleBadge` per role (student/trainer/admin).
 - **Type:** Space Grotesk (display), Inter (body), JetBrains Mono (ids/credentials). A defined type scale (`displayLg…labelSm`).
 - **Spacing:** 8-point-ish scale (`2xs`=4 … `3xl`=64). **Radius:** compact (`base`=4 chips, `md`=6 inputs/buttons, `lg`=8 cards).
-- **Principle:** *structural containment over floaty shadows* — bordered, grounded surfaces rather than heavy elevation.
+- **Principle:** _structural containment over floaty shadows_ — bordered, grounded surfaces rather than heavy elevation.
 
 Tokens are the **single visual source of truth**: JS objects on native; mirrored into Tailwind `@theme` on web so utility classes and native styles stay in sync.
 
@@ -532,15 +538,15 @@ Tokens are the **single visual source of truth**: JS objects on native; mirrored
 
 ## 15. Non-functional requirements
 
-| Attribute | Target / approach |
-|---|---|
-| **Performance** | React Query caching (30s stale), prefetching via `<Link>` on web, code-split routes. Local notifications (no polling). |
-| **Reliability** | Join hand-off never blocked by telemetry; failures on non-critical calls are swallowed. `401` self-heals to login. |
-| **Usability** | One clear CTA per screen; forced-password-change is unskippable; explicit loading/empty/error states on data screens. |
-| **Accessibility** | Sufficient contrast (purple/white, orange CTA), legible type scale, touch targets ≥ 48–52px on mobile. |
-| **Maintainability** | Contract-first types; `strict` + `noUncheckedIndexedAccess`; per-workspace `typecheck`; framework `AGENTS.md` rules. |
-| **Portability** | Shared client uses only global `fetch`; runs on RN/Next/Node unchanged. |
-| **Offline** | Out of scope for v1 beyond React Query's cache; reminders are on-device so they fire without connectivity. |
+| Attribute           | Target / approach                                                                                                      |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Performance**     | React Query caching (30s stale), prefetching via `<Link>` on web, code-split routes. Local notifications (no polling). |
+| **Reliability**     | Join hand-off never blocked by telemetry; failures on non-critical calls are swallowed. `401` self-heals to login.     |
+| **Usability**       | One clear CTA per screen; forced-password-change is unskippable; explicit loading/empty/error states on data screens.  |
+| **Accessibility**   | Sufficient contrast (purple/white, orange CTA), legible type scale, touch targets ≥ 48–52px on mobile.                 |
+| **Maintainability** | Contract-first types; `strict` + `noUncheckedIndexedAccess`; per-workspace `typecheck`; framework `AGENTS.md` rules.   |
+| **Portability**     | Shared client uses only global `fetch`; runs on RN/Next/Node unchanged.                                                |
+| **Offline**         | Out of scope for v1 beyond React Query's cache; reminders are on-device so they fire without connectivity.             |
 
 ---
 
@@ -571,26 +577,26 @@ Tokens are the **single visual source of truth**: JS objects on native; mirrored
 
 ## 18. Ownership & responsibilities
 
-| Surface / area | Platform | Owner |
-|---|---|---|
-| Student app | Mobile (Expo) | **Person A** |
-| Trainer console `app/(trainer)/*` | Web (Next.js, responsive) | **Person A** |
-| Admin console `app/(admin)/*` | Web (Next.js) | **Person B** |
-| Backend, DB, API, email, auth logic | — | **Person B** |
-| `packages/shared` (contract + tokens + client) | — | **both** (edited together) |
+| Surface / area                                 | Platform                  | Owner                      |
+| ---------------------------------------------- | ------------------------- | -------------------------- |
+| Student app                                    | Mobile (Expo)             | **Person A**               |
+| Trainer console `app/(trainer)/*`              | Web (Next.js, responsive) | **Person A**               |
+| Admin console `app/(admin)/*`                  | Web (Next.js)             | **Person B**               |
+| Backend, DB, API, email, auth logic            | —                         | **Person B**               |
+| `packages/shared` (contract + tokens + client) | —                         | **both** (edited together) |
 
 ---
 
 ## 19. Risks & mitigations
 
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Contract drift between the two builders | Broken integration late | Contract-first PRs; types are the source of truth; typecheck gate. |
-| Framework breaking changes (Expo 57 / Next 16) | Wasted time on wrong APIs | `AGENTS.md` mandates reading installed versioned docs before coding. |
-| Web `localStorage` token → XSS exposure | Session theft | Documented; upgrade path to httpOnly cookie post-competition. |
-| Strict Mode misread as OS-level lock | Scope creep / store friction | Explicitly app-based overlay; documented in README + here. |
-| Local-only reminders miss when app is killed | Student misses class | Acceptable for v1 (no push infra); reminders are best-effort focus aids. |
-| 2-week timeline | Incomplete features | Ruthless non-goals; ship the spine (login → schedule → join → report → email). |
+| Risk                                           | Impact                       | Mitigation                                                                     |
+| ---------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------ |
+| Contract drift between the two builders        | Broken integration late      | Contract-first PRs; types are the source of truth; typecheck gate.             |
+| Framework breaking changes (Expo 57 / Next 16) | Wasted time on wrong APIs    | `AGENTS.md` mandates reading installed versioned docs before coding.           |
+| Web `localStorage` token → XSS exposure        | Session theft                | Documented; upgrade path to httpOnly cookie post-competition.                  |
+| Strict Mode misread as OS-level lock           | Scope creep / store friction | Explicitly app-based overlay; documented in README + here.                     |
+| Local-only reminders miss when app is killed   | Student misses class         | Acceptable for v1 (no push infra); reminders are best-effort focus aids.       |
+| 2-week timeline                                | Incomplete features          | Ruthless non-goals; ship the spine (login → schedule → join → report → email). |
 
 ---
 
@@ -608,14 +614,14 @@ Tokens are the **single visual source of truth**: JS objects on native; mirrored
 
 Two-week sprint to ~2026-09-23.
 
-| Phase | Deliverable | Owner |
-|---|---|---|
-| **Foundation** ✅ | Monorepo, `@rubies/shared` (types/api/tokens), tooling, typecheck gate | Person A + both |
-| **Student app** ✅ (scaffold) | Auth flow, tabs, dashboard/schedule/curriculum/profile, class detail + join, Strict Mode overlay, reminders | Person A |
-| **Trainer web** 🚧 | Tokens→Tailwind, providers, login, dashboard, students, curriculum, **report form** | Person A |
-| **Backend** 🚧 | Endpoints, JWT auth, progress compute, report→email, admin CRUD | Person B |
-| **Admin web** 🚧 | User/enrollment/class management, password resets | Person B |
-| **Integration & polish** | Wire real API base URL, end-to-end run, typecheck/lint, demo script | both |
+| Phase                         | Deliverable                                                                                                 | Owner           |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------- |
+| **Foundation** ✅             | Monorepo, `@rubies/shared` (types/api/tokens), tooling, typecheck gate                                      | Person A + both |
+| **Student app** ✅ (scaffold) | Auth flow, tabs, dashboard/schedule/curriculum/profile, class detail + join, Strict Mode overlay, reminders | Person A        |
+| **Trainer web** 🚧            | Tokens→Tailwind, providers, login, dashboard, students, curriculum, **report form**                         | Person A        |
+| **Backend** 🚧                | Endpoints, JWT auth, progress compute, report→email, admin CRUD                                             | Person B        |
+| **Admin web** 🚧              | User/enrollment/class management, password resets                                                           | Person B        |
+| **Integration & polish**      | Wire real API base URL, end-to-end run, typecheck/lint, demo script                                         | both            |
 
 Legend: ✅ done · 🚧 in progress / next. See `STATUS.md` for the live task-level checklist.
 
@@ -623,26 +629,26 @@ Legend: ✅ done · 🚧 in progress / next. See `STATUS.md` for the live task-l
 
 ## Appendix A — endpoint ↔ surface matrix
 
-| Endpoint | Student mobile | Trainer web | Admin web |
-|---|:---:|:---:|:---:|
-| `POST /auth/login` | ✓ | ✓ | ✓ |
-| `POST /auth/change-password` | ✓ | ✓ | ✓ |
-| `GET /me` | ✓ | ✓ | ✓ |
-| `GET /schedule` | ✓ | ✓ | — |
-| `GET /classes/:id` | ✓ | ✓ | — |
-| `GET /curriculum/stages` | ✓ | ✓ | — |
-| `GET /curriculum/progress` | ✓ (self) | ✓ (by id) | — |
-| `GET /trainer/students` | — | ✓ | — |
-| `GET /students/:id` | — | ✓ | — |
-| `POST /reports` | — | ✓ | — |
-| `GET /reports` | — | ✓ | (✓) |
-| `POST /events/join` | ✓ | — | — |
-| `POST /events/strict-mode/activate` | ✓ | — | — |
-| `POST /events/strict-mode/release` | ✓ | — | — |
-| `POST /strict-mode/verify-passcode` | ✓ | — | — |
+| Endpoint                            | Student mobile | Trainer web | Admin web |
+| ----------------------------------- | :------------: | :---------: | :-------: |
+| `POST /auth/login`                  |       ✓        |      ✓      |     ✓     |
+| `POST /auth/change-password`        |       ✓        |      ✓      |     ✓     |
+| `GET /me`                           |       ✓        |      ✓      |     ✓     |
+| `GET /schedule`                     |       ✓        |      ✓      |     —     |
+| `GET /classes/:id`                  |       ✓        |      ✓      |     —     |
+| `GET /curriculum/stages`            |       ✓        |      ✓      |     —     |
+| `GET /curriculum/progress`          |    ✓ (self)    |  ✓ (by id)  |     —     |
+| `GET /trainer/students`             |       —        |      ✓      |     —     |
+| `GET /students/:id`                 |       —        |      ✓      |     —     |
+| `POST /reports`                     |       —        |      ✓      |     —     |
+| `GET /reports`                      |       —        |      ✓      |    (✓)    |
+| `POST /events/join`                 |       ✓        |      —      |     —     |
+| `POST /events/strict-mode/activate` |       ✓        |      —      |     —     |
+| `POST /events/strict-mode/release`  |       ✓        |      —      |     —     |
+| `POST /strict-mode/verify-passcode` |       ✓        |      —      |     —     |
 
-*(Admin surface owned by Person B; admin uses of read endpoints marked `(✓)` are indicative.)*
+_(Admin surface owned by Person B; admin uses of read endpoints marked `(✓)` are indicative.)_
 
 ---
 
-*This document reflects the locked scope decisions for the competition build. Changes to the API contract must be made jointly in `packages/shared` and this document updated alongside.*
+_This document reflects the locked scope decisions for the competition build. Changes to the API contract must be made jointly in `packages/shared` and this document updated alongside._
