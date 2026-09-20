@@ -10,6 +10,7 @@
   "scripts": {
     "mobile": "npm run start --workspace mobile",
     "web": "npm run dev --workspace web",
+    "api": "npm run dev --workspace @rubies/api",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
   },

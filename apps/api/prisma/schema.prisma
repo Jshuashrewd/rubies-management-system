@@ -1,0 +1,202 @@
+// Rubies Code School — database schema.
+// Mirrors packages/shared/src/types.ts exactly. If you change a field here,
+// the contract (types.ts) and this file must be updated together.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  student
+  trainer
+  admin
+}
+
+enum ClassStatus {
+  scheduled
+  live
+  ended
+  cancelled
+}
+
+enum AttendanceStatus {
+  present
+  late
+  absent
+}
+
+enum ReportStatus {
+  draft
+  submitted
+  sent
+}
+
+enum StrictModeEventType {
+  activated
+  released
+}
+
+enum StrictModeReleaseReason {
+  scheduled_end
+  class_joined
+  passcode_override
+}
+
+enum StrictModeSource {
+  auto
+  parent
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  schoolId           String   @unique // e.g. "RCS-STU-2025-884"
+  role               Role
+  firstName          String
+  lastName           String
+  email              String?
+  passwordHash       String
+  mustChangePassword Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  // Role-specific profile rows (only one will exist, matching `role`)
+  student Student?
+  trainer Trainer?
+
+  @@map("users")
+}
+
+model Student {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cohort                 String
+  track                  String
+  guardianName           String?
+  guardianEmail          String
+  currentStageId         String?
+  currentStage           CurriculumStage? @relation(fields: [currentStageId], references: [id])
+  strictModePasscodeHash String?  // null until a parent sets one
+
+  enrollments       Enrollment[]
+  joinEvents        JoinEvent[]
+  reports           Report[]
+  strictModeEvents  StrictModeEvent[]
+
+  @@map("students")
+}
+
+model Trainer {
+  id     String  @id @default(cuid())
+  userId String  @unique
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title  String?
+
+  classSessions ClassSession[]
+  reports       Report[]
+
+  @@map("trainers")
+}
+
+model Enrollment {
+  id         String   @id @default(cuid())
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  cohort     String
+  track      String
+  enrolledAt DateTime @default(now())
+
+  @@map("enrollments")
+}
+
+model CurriculumStage {
+  id          String  @id @default(cuid())
+  order       Int
+  title       String
+  description String?
+  track       String?
+
+  classSessions   ClassSession[]
+  studentsCurrent Student[]
+  reports         Report[]
+
+  @@map("curriculum_stages")
+}
+
+model ClassSession {
+  id                String            @id @default(cuid())
+  title             String
+  description       String?
+  trainerId         String
+  trainer           Trainer           @relation(fields: [trainerId], references: [id])
+  cohort            String
+  track             String?
+  curriculumStageId String?
+  curriculumStage   CurriculumStage?  @relation(fields: [curriculumStageId], references: [id])
+  scheduledStartAt  DateTime
+  scheduledEndAt    DateTime
+  status            ClassStatus       @default(scheduled)
+  zoomJoinUrl       String
+  zoomMeetingId     String?
+
+  joinEvents       JoinEvent[]
+  reports          Report[]
+  strictModeEvents StrictModeEvent[]
+
+  @@map("class_sessions")
+}
+
+model Report {
+  id                String           @id @default(cuid())
+  classId           String
+  classSession      ClassSession     @relation(fields: [classId], references: [id])
+  studentId         String
+  student           Student          @relation(fields: [studentId], references: [id])
+  trainerId         String
+  trainer           Trainer          @relation(fields: [trainerId], references: [id])
+  status            ReportStatus     @default(draft)
+  attendance        AttendanceStatus
+  participation     Int
+  curriculumStageId String
+  curriculumStage   CurriculumStage  @relation(fields: [curriculumStageId], references: [id])
+  stageCompleted    Boolean          @default(false)
+  topicsCovered     String
+  strengths         String
+  areasToImprove    String
+  homework          String?
+  trainerComments   String
+  submittedAt       DateTime?
+  createdAt         DateTime         @default(now())
+
+  @@map("reports")
+}
+
+model JoinEvent {
+  id        String       @id @default(cuid())
+  studentId String
+  student   Student      @relation(fields: [studentId], references: [id])
+  classId   String
+  classSession ClassSession @relation(fields: [classId], references: [id])
+  joinedAt  DateTime     @default(now())
+  source    String       @default("zoom_deeplink")
+
+  @@map("join_events")
+}
+
+model StrictModeEvent {
+  id        String                    @id @default(cuid())
+  studentId String
+  student   Student                   @relation(fields: [studentId], references: [id])
+  classId   String?
+  classSession ClassSession?          @relation(fields: [classId], references: [id])
+  type      StrictModeEventType
+  reason    StrictModeReleaseReason?
+  source    StrictModeSource
+  at        DateTime                  @default(now())
+
+  @@map("strict_mode_events")
+}
