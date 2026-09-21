@@ -10,6 +10,18 @@ import type { User } from "@rubies/shared";
 import { api } from "./api";
 import { clearToken, getToken, saveToken } from "./storage";
 
+const DEV_BYPASS_AUTH = process.env.EXPO_PUBLIC_DEV_BYPASS_AUTH === "true";
+const DEV_USER: User = {
+  id: "dev-student",
+  schoolId: "RCS-STU-DEV-001",
+  role: "student",
+  firstName: "Dev",
+  lastName: "Student",
+  email: "dev.student@example.test",
+  mustChangePassword: false,
+  createdAt: "2026-01-01T00:00:00.000Z",
+};
+
 interface AuthState {
   user: User | null;
   isLoading: boolean;
@@ -25,6 +37,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (DEV_BYPASS_AUTH) {
+      setUser(DEV_USER);
+      setLoading(false);
+      return;
+    }
+
     let active = true;
     (async () => {
       try {
