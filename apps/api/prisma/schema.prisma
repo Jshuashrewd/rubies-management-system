@@ -155,7 +155,7 @@ model Report {
   classId           String
   classSession      ClassSession     @relation(fields: [classId], references: [id])
   studentId         String
-  student           Student          @relation(fields: [studentId], references: [id])
+  student           Student          @relation(fields: [studentId], references: [userId])
   trainerId         String
   trainer           Trainer          @relation(fields: [trainerId], references: [id])
   status            ReportStatus     @default(draft)
@@ -178,7 +178,7 @@ model Report {
 model JoinEvent {
   id        String       @id @default(cuid())
   studentId String
-  student   Student      @relation(fields: [studentId], references: [id])
+  student   Student      @relation(fields: [studentId], references: [userId])
   classId   String
   classSession ClassSession @relation(fields: [classId], references: [id])
   joinedAt  DateTime     @default(now())
@@ -190,7 +190,7 @@ model JoinEvent {
 model StrictModeEvent {
   id        String                    @id @default(cuid())
   studentId String
-  student   Student                   @relation(fields: [studentId], references: [id])
+  student   Student                   @relation(fields: [studentId], references: [userId])
   classId   String?
   classSession ClassSession?          @relation(fields: [classId], references: [id])
   type      StrictModeEventType
