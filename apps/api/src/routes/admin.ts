@@ -5,7 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { asyncRoute } from '../middleware/error-handler.js';
 import { HttpApiError } from '../lib/errors.js';
-import { toUserDto } from '../lib/dto.js';
+import { toUserDto, toClassSessionDto } from '../lib/dto.js';
 
 /**
  * Admin-only routes — not part of the shared contract's endpoint catalog
@@ -15,6 +15,10 @@ import { toUserDto } from '../lib/dto.js';
  */
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole('admin'));
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
 
 // GET /admin/users — full list, for the admin dashboard's user table.
 adminRouter.get(
@@ -135,5 +139,173 @@ adminRouter.post(
     });
 
     res.json({ success: true });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Curriculum stages
+// ---------------------------------------------------------------------------
+
+function toStageDto(stage: {
+  id: string;
+  order: number;
+  title: string;
+  description: string | null;
+  track: string | null;
+}) {
+  return {
+    id: stage.id,
+    order: stage.order,
+    title: stage.title,
+    description: stage.description,
+    track: stage.track,
+  };
+}
+
+const createStageSchema = z.object({
+  order: z.number().int().min(1),
+  title: z.string().min(1),
+  description: z.string().optional(),
+  track: z.string().min(1),
+});
+
+// POST /admin/curriculum-stages — create one stage in a track's sequence.
+// `order` determines where it sits — reports.stageCompleted uses this to
+// find "the next stage" (see routes/reports.ts), so keep orders unique
+// and gapless within a track if you want auto-advance to make sense.
+adminRouter.post(
+  '/curriculum-stages',
+  asyncRoute(async (req, res) => {
+    const parsed = createStageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new HttpApiError(
+        'validation_error',
+        parsed.error.issues[0]?.message ?? 'Invalid curriculum stage data.',
+      );
+    }
+    const stage = await prisma.curriculumStage.create({ data: parsed.data });
+    res.status(201).json(toStageDto(stage));
+  }),
+);
+
+// GET /admin/curriculum-stages[?track] — full list for the admin console
+// (unlike GET /curriculum/stages which any authenticated user can call,
+// this is here for symmetry/admin-specific filtering, e.g. by track).
+adminRouter.get(
+  '/curriculum-stages',
+  asyncRoute(async (req, res) => {
+    const track = req.query.track as string | undefined;
+    const stages = await prisma.curriculumStage.findMany({
+      where: track ? { track } : undefined,
+      orderBy: { order: 'asc' },
+    });
+    res.json(stages.map(toStageDto));
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Class sessions
+// ---------------------------------------------------------------------------
+
+const createClassSessionSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  trainerUserId: z.string().min(1), // the trainer's User.id (from GET /admin/users)
+  cohort: z.string().min(1),
+  track: z.string().optional(),
+  curriculumStageId: z.string().optional(),
+  scheduledStartAt: z.string().datetime(),
+  scheduledEndAt: z.string().datetime(),
+  zoomJoinUrl: z.string().url(),
+  zoomMeetingId: z.string().optional(),
+});
+
+// POST /admin/class-sessions — schedule a class. This is the piece that
+// unblocks everything else: without a ClassSession, a trainer has nothing
+// to submit a report against and a student has nothing on their schedule.
+adminRouter.post(
+  '/class-sessions',
+  asyncRoute(async (req, res) => {
+    const parsed = createClassSessionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new HttpApiError(
+        'validation_error',
+        parsed.error.issues[0]?.message ?? 'Invalid class session data.',
+      );
+    }
+    const input = parsed.data;
+
+    if (new Date(input.scheduledEndAt) <= new Date(input.scheduledStartAt)) {
+      throw new HttpApiError('validation_error', 'scheduledEndAt must be after scheduledStartAt.');
+    }
+
+    const trainer = await prisma.trainer.findUnique({ where: { userId: input.trainerUserId } });
+    if (!trainer) {
+      throw new HttpApiError('not_found', 'No trainer found for that trainerUserId.');
+    }
+
+    if (input.curriculumStageId) {
+      const stage = await prisma.curriculumStage.findUnique({
+        where: { id: input.curriculumStageId },
+      });
+      if (!stage) throw new HttpApiError('not_found', 'curriculumStageId does not exist.');
+    }
+
+    const session = await prisma.classSession.create({
+      data: {
+        title: input.title,
+        description: input.description,
+        trainerId: trainer.id,
+        cohort: input.cohort,
+        track: input.track,
+        curriculumStageId: input.curriculumStageId,
+        scheduledStartAt: new Date(input.scheduledStartAt),
+        scheduledEndAt: new Date(input.scheduledEndAt),
+        zoomJoinUrl: input.zoomJoinUrl,
+        zoomMeetingId: input.zoomMeetingId,
+      },
+      include: { trainer: { include: { user: true } } },
+    });
+
+    res.status(201).json(toClassSessionDto(session));
+  }),
+);
+
+const updateClassSessionSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional(),
+  scheduledStartAt: z.string().datetime().optional(),
+  scheduledEndAt: z.string().datetime().optional(),
+  status: z.enum(['scheduled', 'live', 'ended', 'cancelled']).optional(),
+  zoomJoinUrl: z.string().url().optional(),
+});
+
+// PATCH /admin/class-sessions/:id — reschedule, cancel, or mark a class
+// ended. (A trainer "End Class" action, if you build one later, should hit
+// this same endpoint with { status: "ended" } — no need for a second route.)
+adminRouter.patch(
+  '/class-sessions/:id',
+  asyncRoute(async (req, res) => {
+    const parsed = updateClassSessionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new HttpApiError(
+        'validation_error',
+        parsed.error.issues[0]?.message ?? 'Invalid update.',
+      );
+    }
+    const existing = await prisma.classSession.findUnique({ where: { id: req.params.id } });
+    if (!existing) throw new HttpApiError('not_found', 'Class session not found.');
+
+    const data = { ...parsed.data } as Record<string, unknown>;
+    if (data.scheduledStartAt) data.scheduledStartAt = new Date(data.scheduledStartAt as string);
+    if (data.scheduledEndAt) data.scheduledEndAt = new Date(data.scheduledEndAt as string);
+
+    const updated = await prisma.classSession.update({
+      where: { id: req.params.id },
+      data,
+      include: { trainer: { include: { user: true } } },
+    });
+
+    res.json(toClassSessionDto(updated));
   }),
 );
