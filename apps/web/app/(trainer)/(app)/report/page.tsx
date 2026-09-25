@@ -121,7 +121,7 @@ export default function ReportPage() {
   const loadError = classesQuery.isError || studentsQuery.isError || stagesQuery.isError;
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-[42rem]">
       <h1 className="font-display text-headline-md font-bold text-text-primary">
         Post-class report
       </h1>
