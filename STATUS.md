@@ -1,6 +1,20 @@
 # Build Status — Rubies Code School Management System
 
-_Last updated: 2026-09-15_
+_Last updated: 2026-09-21_
+
+## Recent fixes
+
+### 2026-09-21 — Trainer web layout broken (Tailwind v4 theme namespace collision)
+
+**Symptom:** on `/login`, `/change-password`, and `/report`, headings/body text wrapped one word per line despite plenty of horizontal room, and `<input>`/`<select>` elements rendered as tiny (~12–30px) squares instead of full-width fields. Colors, flex proportions, and the two-panel login layout were unaffected.
+
+**Root cause:** `apps/web/app/globals.css`'s `@theme` block defines a named spacing scale (`--spacing-2xs` … `--spacing-3xl`) using Tailwind's own t-shirt-size vocabulary (`xs`, `sm`, `md`, `lg`, `xl`, `2xl`, `3xl`). In Tailwind v4, the `--spacing-*` namespace is shared by every spacing-based utility — including `max-w-*` — and it takes priority over the framework's own default `--container-*` scale whenever a same-named key exists. So `max-w-sm` resolved to `var(--spacing-sm)` (12px) instead of the intended `--container-sm` (24rem/384px); `max-w-xs` → 8px instead of 320px; `max-w-2xl` → 48px instead of 672px. That collapsed the login/change-password form and the report page's content column to a few pixels wide, forcing every word inside onto its own line and squeezing the inputs down to near-zero.
+
+Confirmed empirically (not guessed) with an isolated Tailwind v4 PostCSS build: a clean default theme resolves `max-w-sm` to `var(--container-sm)` correctly; reintroducing just this project's `--spacing-*` block reproduces the bug; explicitly adding `--container-sm` etc. *alongside* the colliding `--spacing-sm` does **not** fix it — `--spacing-*` wins regardless. Verified live in a real browser (Playwright + the pre-installed Chromium) before and after the fix: `form` computed `max-width` went from `12px` → `384px`, input `width` from `30px` → `384px`.
+
+**Fix:** replaced the four affected `max-w-{size}` usages with explicit arbitrary-value classes carrying the originally-intended standard Tailwind sizes — `max-w-[20rem]`, `max-w-[24rem]` (×2), `max-w-[42rem]` — in `app/(trainer)/login/page.tsx`, `app/(trainer)/change-password/page.tsx`, `app/(trainer)/(app)/report/page.tsx`. No change to `globals.css` or `packages/shared`; the named `--spacing-*` scale itself is untouched and still works correctly for `p-*`/`gap-*`/`m-*`/etc., which don't collide with any Tailwind default namespace.
+
+**Watch for:** any future `w-{size}`, `h-{size}`, `min-w-{size}`, `min-h-{size}`, `max-h-{size}` utility (not just `max-w-*`) with `{size}` ∈ `{xs,sm,md,lg,xl,2xl,3xl}` will hit the same collision (confirmed none exist elsewhere in the codebase as of this fix). Use an arbitrary-value class (e.g. `w-[24rem]`) instead of the bare named utility for those, or a value outside the t-shirt-size vocabulary.
 
 A monorepo for Rubies Code School. **Person A (me/you)** owns the Student **mobile app** (Expo) and the Trainer **web pages** (Next.js). **Person B** owns the backend, database, APIs, email, and the Admin dashboard.
 

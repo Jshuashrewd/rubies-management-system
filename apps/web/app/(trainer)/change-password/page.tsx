@@ -47,7 +47,7 @@ export default function ChangePasswordPage() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-canvas-tint p-lg">
-      <form onSubmit={onSubmit} className="w-full max-w-sm rounded-lg border border-border bg-canvas p-lg">
+      <form onSubmit={onSubmit} className="w-full max-w-[24rem] rounded-lg border border-border bg-canvas p-lg">
         <h1 className="font-display text-headline-md font-bold text-text-primary">
           Set a new password
         </h1>

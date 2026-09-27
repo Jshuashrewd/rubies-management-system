@@ -38,7 +38,7 @@ export default function LoginPage() {
         <span className="font-display text-title-lg font-semibold tracking-tight">
           Rubies Code School
         </span>
-        <div className="max-w-xs">
+        <div className="max-w-[20rem]">
           <p className="font-display text-headline-lg font-semibold leading-tight">
             Trainer console
           </p>
@@ -51,7 +51,7 @@ export default function LoginPage() {
       </div>
 
       <div className="flex flex-1 items-center justify-center p-lg">
-        <form onSubmit={onSubmit} className="w-full max-w-sm">
+        <form onSubmit={onSubmit} className="w-full max-w-[24rem]">
           <div className="mb-xl md:hidden">
             <span className="font-display text-title-lg font-semibold text-primary">
               Rubies Code School
