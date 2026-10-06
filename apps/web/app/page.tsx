@@ -1,8 +1,8 @@
 "use client";
 
-// Entry route: send the trainer where they belong based on auth state.
-// Mirrors apps/mobile/src/app/index.tsx. Once app/(trainer)/(app)/dashboard
-// exists, swap the signed-in redirect target from "/report" to "/dashboard".
+// Entry route: send the signed-in user where they belong based on role.
+// Mirrors apps/mobile/src/app/index.tsx (student side). This app now
+// serves two roles — trainer (report console) and admin (admin console).
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
@@ -17,6 +17,8 @@ export default function Index() {
       router.replace("/login");
     } else if (user.mustChangePassword) {
       router.replace("/change-password");
+    } else if (user.role === "admin") {
+      router.replace("/admin/dashboard");
     } else {
       router.replace("/report");
     }

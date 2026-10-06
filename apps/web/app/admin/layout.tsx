@@ -1,19 +1,27 @@
 "use client";
 
-// Shared chrome for signed-in trainer routes. Mirrors the auth-gate role
-// apps/mobile/src/app/index.tsx plays, plus the tab bar apps/mobile's
-// (tabs)/_layout.tsx provides — collapsed to a top bar since there's one
-// route (report) so far. Add nav links here as dashboard/students/
-// curriculum land.
-import { useRouter } from "next/navigation";
+// Shared chrome for signed-in admin routes. Mirrors the structure of
+// apps/web/app/(trainer)/(app)/layout.tsx — same header/guard shape, with
+// admin-specific nav links and a stricter role check (kicks non-admins
+// back out to the trainer console rather than just to /login).
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { roleBadge } from "@rubies/shared";
 import { Logo } from "@/components/ui/Logo";
 import { useAuth } from "@/lib/auth";
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+const NAV_LINKS = [
+  { href: "/admin/dashboard", label: "Dashboard" },
+  { href: "/admin/users", label: "Users" },
+  { href: "/admin/curriculum", label: "Curriculum" },
+  { href: "/admin/classes", label: "Classes" },
+];
+
+export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, isLoading, signOut } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (isLoading) return;
@@ -21,6 +29,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       router.replace("/login");
     } else if (user.mustChangePassword) {
       router.replace("/change-password");
+    } else if (user.role !== "admin") {
+      // A trainer/student token somehow reaching /admin/* — send them back
+      // to their own console rather than showing (or erroring on) admin data.
+      router.replace("/report");
     }
   }, [isLoading, user, router]);
 
@@ -29,7 +41,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     router.replace("/login");
   }
 
-  if (isLoading || !user || user.mustChangePassword) {
+  if (isLoading || !user || user.mustChangePassword || user.role !== "admin") {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-canvas-tint">
         <span
@@ -46,7 +58,28 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col bg-canvas-tint">
       <header className="flex items-center justify-between border-b border-border bg-canvas px-lg py-sm shadow-sm">
-        <Logo size="sm" />
+        <div className="flex items-center gap-xl">
+          <Logo size="sm" />
+          <nav className="flex items-center gap-md">
+            {NAV_LINKS.map((link) => {
+              const active = pathname?.startsWith(link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={[
+                    "rounded-base px-xs py-2xs font-body text-body-md font-semibold transition-colors",
+                    active
+                      ? "bg-primary/10 text-primary"
+                      : "text-text-secondary hover:bg-canvas-tint hover:text-text-primary",
+                  ].join(" ")}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
 
         <div className="flex items-center gap-sm">
           <span

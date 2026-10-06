@@ -16,8 +16,8 @@ function toReportDto(r: {
   status: string;
   attendance: string;
   participation: number;
-  curriculumStageId: string;
-  stageCompleted: boolean;
+  topicId: string;
+  topicCompleted: boolean;
   topicsCovered: string;
   strengths: string;
   areasToImprove: string;
@@ -34,8 +34,8 @@ function toReportDto(r: {
     status: r.status,
     attendance: r.attendance,
     participation: r.participation,
-    curriculumStageId: r.curriculumStageId,
-    stageCompleted: r.stageCompleted,
+    topicId: r.topicId,
+    topicCompleted: r.topicCompleted,
     topicsCovered: r.topicsCovered,
     strengths: r.strengths,
     areasToImprove: r.areasToImprove,
@@ -51,8 +51,8 @@ const createReportSchema = z.object({
   studentId: z.string().min(1),
   attendance: z.enum(['present', 'late', 'absent']),
   participation: z.number().int().min(1).max(5),
-  curriculumStageId: z.string().min(1),
-  stageCompleted: z.boolean(),
+  topicId: z.string().min(1),
+  topicCompleted: z.boolean(),
   topicsCovered: z.string().min(1),
   strengths: z.string().min(1),
   areasToImprove: z.string().min(1),
@@ -60,7 +60,46 @@ const createReportSchema = z.object({
   trainerComments: z.string().min(1),
 });
 
-// POST /reports — trainer submits → persist, auto-advance stage, email guardian.
+/**
+ * Given a completed topic, find what a student moves to next:
+ *   1. the next Topic in the same Level (by order), else
+ *   2. the first Topic of the next Level in the same Stage (by order), else
+ *   3. the first Topic of the first Level of the next Stage, else
+ *   4. null — they've finished the entire curriculum; stay put.
+ */
+async function findNextTopicId(currentTopicId: string): Promise<string | null> {
+  const current = await prisma.topic.findUniqueOrThrow({
+    where: { id: currentTopicId },
+    include: { level: true },
+  });
+
+  const nextInLevel = await prisma.topic.findFirst({
+    where: { levelId: current.levelId, order: { gt: current.order } },
+    orderBy: { order: 'asc' },
+  });
+  if (nextInLevel) return nextInLevel.id;
+
+  const nextLevel = await prisma.level.findFirst({
+    where: { stage: current.level.stage, order: { gt: current.level.order } },
+    orderBy: { order: 'asc' },
+    include: { topics: { orderBy: { order: 'asc' }, take: 1 } },
+  });
+  if (nextLevel?.topics[0]) return nextLevel.topics[0].id;
+
+  const STAGE_ORDER = ['scratch', 'creator', 'innovator'] as const;
+  const stageIndex = STAGE_ORDER.indexOf(current.level.stage as (typeof STAGE_ORDER)[number]);
+  const nextStage = STAGE_ORDER[stageIndex + 1];
+  if (!nextStage) return null; // finished Innovator — nothing further
+
+  const firstLevelOfNextStage = await prisma.level.findFirst({
+    where: { stage: nextStage },
+    orderBy: { order: 'asc' },
+    include: { topics: { orderBy: { order: 'asc' }, take: 1 } },
+  });
+  return firstLevelOfNextStage?.topics[0]?.id ?? null;
+}
+
+// POST /reports — trainer submits → persist, auto-advance topic, email guardian.
 reportsRouter.post(
   '/',
   requireAuth,
@@ -77,18 +116,21 @@ reportsRouter.post(
 
     const trainer = await prisma.trainer.findUniqueOrThrow({ where: { userId: req.user!.id } });
 
-    const [classSession, student, stage] = await Promise.all([
-      prisma.classSession.findUnique({ where: { id: input.classId } }),
+    const [classSession, student, topic] = await Promise.all([
+      prisma.classSession.findUnique({
+        where: { id: input.classId },
+        include: { classSchedule: true },
+      }),
       prisma.student.findUnique({
         where: { userId: input.studentId },
         include: { user: true },
       }),
-      prisma.curriculumStage.findUnique({ where: { id: input.curriculumStageId } }),
+      prisma.topic.findUnique({ where: { id: input.topicId } }),
     ]);
     if (!classSession) throw new HttpApiError('not_found', 'Class not found.');
     if (!student) throw new HttpApiError('not_found', 'Student not found.');
-    if (!stage) throw new HttpApiError('not_found', 'Curriculum stage not found.');
-    if (classSession.trainerId !== trainer.id) {
+    if (!topic) throw new HttpApiError('not_found', 'Topic not found.');
+    if (classSession.classSchedule.trainerId !== trainer.id) {
       throw new HttpApiError('forbidden', 'This class is not assigned to you.');
     }
 
@@ -102,8 +144,8 @@ reportsRouter.post(
         status: 'submitted',
         attendance: input.attendance,
         participation: input.participation,
-        curriculumStageId: input.curriculumStageId,
-        stageCompleted: input.stageCompleted,
+        topicId: input.topicId,
+        topicCompleted: input.topicCompleted,
         topicsCovered: input.topicsCovered,
         strengths: input.strengths,
         areasToImprove: input.areasToImprove,
@@ -113,17 +155,14 @@ reportsRouter.post(
       },
     });
 
-    // Auto-advance: submitting stageCompleted=true moves the student to the
-    // next stage in their track. This is the ONLY thing that advances a
-    // student — reporting and curriculum progress stay in lockstep.
-    if (input.stageCompleted) {
-      const nextStage = await prisma.curriculumStage.findFirst({
-        where: { track: student.track, order: { gt: stage.order } },
-        orderBy: { order: 'asc' },
-      });
+    // Auto-advance: submitting topicCompleted=true moves the student to the
+    // next topic — within the level, then the next level, then the next
+    // stage. This is the ONLY thing that advances a student.
+    if (input.topicCompleted) {
+      const nextTopicId = await findNextTopicId(input.topicId);
       await prisma.student.update({
         where: { userId: student.userId },
-        data: { currentStageId: nextStage?.id ?? stage.id },
+        data: { currentTopicId: nextTopicId ?? input.topicId },
       });
     }
 
@@ -136,7 +175,7 @@ reportsRouter.post(
         guardianEmail: student.guardianEmail,
         guardianName: student.guardianName,
         studentFirstName: student.user.firstName,
-        classTitle: classSession.title,
+        classTitle: classSession.classSchedule.title,
         trainerName: `${trainerUser.firstName} ${trainerUser.lastName}`,
         attendance: input.attendance,
         participation: input.participation,
@@ -145,8 +184,8 @@ reportsRouter.post(
         areasToImprove: input.areasToImprove,
         homework: input.homework ?? null,
         trainerComments: input.trainerComments,
-        stageCompleted: input.stageCompleted,
-        stageTitle: stage.title,
+        stageCompleted: input.topicCompleted,
+        stageTitle: topic.title,
       });
       const sent = await prisma.report.update({
         where: { id: report.id },

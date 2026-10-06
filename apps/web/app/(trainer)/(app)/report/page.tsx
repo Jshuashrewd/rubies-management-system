@@ -6,6 +6,7 @@ import {
   ApiError,
   type AttendanceStatus,
   type CreateReportInput,
+  type LevelWithTopics,
 } from "@rubies/shared";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -26,8 +27,8 @@ const EMPTY_FORM = {
   studentId: "",
   attendance: "" as AttendanceStatus | "",
   participation: null as number | null,
-  curriculumStageId: "",
-  stageCompleted: false,
+  topicId: "",
+  topicCompleted: false,
   topicsCovered: "",
   strengths: "",
   areasToImprove: "",
@@ -49,10 +50,18 @@ export default function ReportPage() {
     queryKey: ["trainer-students"],
     queryFn: () => api.students.assigned(),
   });
-  const stagesQuery = useQuery({
-    queryKey: ["curriculum-stages"],
-    queryFn: () => api.curriculum.stages(),
+  const levelsQuery = useQuery({
+    queryKey: ["curriculum-levels"],
+    queryFn: () => api.curriculum.levels(),
   });
+  // Flatten Stage -> Level -> Topic into one ordered list for a single
+  // "what did you cover" picker, labelled with its full path.
+  const topicOptions = (levelsQuery.data ?? []).flatMap((level: LevelWithTopics) =>
+    level.topics.map((topic) => ({
+      id: topic.id,
+      label: `${level.stage} L${level.order}: ${topic.title}`,
+    })),
+  );
 
   const selectedStudent = useMemo(
     () => studentsQuery.data?.find((s) => s.id === form.studentId) ?? null,
@@ -84,8 +93,8 @@ export default function ReportPage() {
     setError(null);
     setConfirmation(null);
 
-    if (!form.classId || !form.studentId || !form.attendance || !form.curriculumStageId) {
-      setError("Fill in class, student, attendance, and curriculum stage.");
+    if (!form.classId || !form.studentId || !form.attendance || !form.topicId) {
+      setError("Fill in class, student, attendance, and topic.");
       return;
     }
     if (!form.participation) {
@@ -102,8 +111,8 @@ export default function ReportPage() {
       studentId: form.studentId,
       attendance: form.attendance,
       participation: form.participation,
-      curriculumStageId: form.curriculumStageId,
-      stageCompleted: form.stageCompleted,
+      topicId: form.topicId,
+      topicCompleted: form.topicCompleted,
       topicsCovered: form.topicsCovered.trim(),
       strengths: form.strengths.trim(),
       areasToImprove: form.areasToImprove.trim(),
@@ -118,7 +127,7 @@ export default function ReportPage() {
     }
   }
 
-  const loadError = classesQuery.isError || studentsQuery.isError || stagesQuery.isError;
+  const loadError = classesQuery.isError || studentsQuery.isError || levelsQuery.isError;
 
   return (
     <div className="mx-auto max-w-[42rem]">
@@ -133,7 +142,7 @@ export default function ReportPage() {
       {loadError ? (
         <Card className="mt-lg border-error/40 bg-error/5">
           <p className="font-body text-body-md text-error">
-            Couldn&apos;t load classes, students, or curriculum stages. Check that
+            Couldn&apos;t load classes, students, or the curriculum. Check that
             the API is running, then refresh.
           </p>
         </Card>
@@ -175,7 +184,7 @@ export default function ReportPage() {
                   </option>
                   {studentsQuery.data?.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.firstName} {s.lastName} — {s.cohort}
+                      {s.firstName} {s.lastName}
                     </option>
                   ))}
                 </select>
@@ -231,24 +240,24 @@ export default function ReportPage() {
 
           <Card className="flex flex-col gap-md">
             <Field
-              label="Curriculum stage covered"
-              htmlFor="curriculumStageId"
-              hint={selectedStudent ? `Current stage: ${selectedStudent.currentStageId ?? "—"}` : undefined}
+              label="Topic covered"
+              htmlFor="topicId"
+              hint={selectedStudent ? `Current topic id: ${selectedStudent.currentTopicId ?? "—"}` : undefined}
             >
               <select
-                id="curriculumStageId"
+                id="topicId"
                 className={controlClasses}
-                value={form.curriculumStageId}
-                onChange={(e) => update("curriculumStageId", e.target.value)}
-                disabled={stagesQuery.isLoading}
+                value={form.topicId}
+                onChange={(e) => update("topicId", e.target.value)}
+                disabled={levelsQuery.isLoading}
                 required
               >
                 <option value="" disabled>
-                  {stagesQuery.isLoading ? "Loading…" : "Select a stage"}
+                  {levelsQuery.isLoading ? "Loading…" : "Select a topic"}
                 </option>
-                {stagesQuery.data?.map((stage) => (
-                  <option key={stage.id} value={stage.id}>
-                    Stage {stage.order}: {stage.title}
+                {topicOptions.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
                   </option>
                 ))}
               </select>
@@ -257,11 +266,11 @@ export default function ReportPage() {
             <label className="flex items-center gap-xs font-body text-body-md text-text-primary">
               <input
                 type="checkbox"
-                checked={form.stageCompleted}
-                onChange={(e) => update("stageCompleted", e.target.checked)}
+                checked={form.topicCompleted}
+                onChange={(e) => update("topicCompleted", e.target.checked)}
                 className="h-4 w-4 accent-accent"
               />
-              Mark this stage complete — advances the student to the next one
+              Mark this topic complete — advances the student to the next one
             </label>
           </Card>
 

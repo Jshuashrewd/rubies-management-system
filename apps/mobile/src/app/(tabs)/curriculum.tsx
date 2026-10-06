@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
-import type { CurriculumProgress, CurriculumStage } from "@rubies/shared";
+import type { CurriculumProgress, LevelWithTopics, Topic } from "@rubies/shared";
 import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
 import { api } from "@/lib/api";
@@ -24,6 +24,12 @@ export default function Curriculum() {
         <View style={styles.center}>
           <Text style={styles.muted}>Couldn&apos;t load your progress.</Text>
         </View>
+      ) : !q.data.currentStage ? (
+        <View style={styles.center}>
+          <Text style={styles.muted}>
+            You haven&apos;t been placed on a topic yet — check with your trainer.
+          </Text>
+        </View>
       ) : (
         <Progress data={q.data} />
       )}
@@ -33,13 +39,13 @@ export default function Curriculum() {
 
 function Progress({ data }: { data: CurriculumProgress }) {
   const pct = Math.max(0, Math.min(100, data.percentComplete));
-  const completed = new Set(data.completedStageIds);
+  const completed = new Set(data.completedTopicIds);
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: spacing.xl }}>
       <Card style={{ marginTop: spacing.md }}>
         <Text style={styles.pctLabel}>
-          Stage {data.currentStageOrder} of {data.totalStages}
+          {capitalize(data.currentStage!)} — {data.totalTopicsInStage} topics
         </Text>
         <View style={styles.barTrack}>
           <View style={[styles.barFill, { width: `${pct}%` }]} />
@@ -47,13 +53,13 @@ function Progress({ data }: { data: CurriculumProgress }) {
         <Text style={styles.pctValue}>{pct}% complete</Text>
       </Card>
 
-      <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
-        {data.stages.map((stage) => (
-          <StageRow
-            key={stage.id}
-            stage={stage}
-            done={completed.has(stage.id)}
-            current={stage.id === data.currentStageId}
+      <View style={{ marginTop: spacing.lg, gap: spacing.lg }}>
+        {data.levels.map((level) => (
+          <LevelSection
+            key={level.id}
+            level={level}
+            completed={completed}
+            currentTopicId={data.currentTopicId}
           />
         ))}
       </View>
@@ -61,28 +67,50 @@ function Progress({ data }: { data: CurriculumProgress }) {
   );
 }
 
-function StageRow({
-  stage,
-  done,
-  current,
+function LevelSection({
+  level,
+  completed,
+  currentTopicId,
 }: {
-  stage: CurriculumStage;
-  done: boolean;
-  current: boolean;
+  level: LevelWithTopics;
+  completed: Set<string>;
+  currentTopicId: string | null;
 }) {
   return (
-    <View style={[styles.stageRow, current && styles.stageCurrent]}>
-      <View style={[styles.stageDot, done && styles.stageDotDone]}>
-        <Text style={styles.stageDotText}>{done ? "✓" : stage.order}</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.stageTitle}>{stage.title}</Text>
-        {stage.description ? (
-          <Text style={styles.stageDesc}>{stage.description}</Text>
-        ) : null}
+    <View>
+      <Text style={styles.levelHeading}>
+        L{level.order}: {level.title}
+      </Text>
+      <View style={{ gap: spacing.sm, marginTop: spacing.xs }}>
+        {level.topics.map((topic) => (
+          <TopicRow
+            key={topic.id}
+            topic={topic}
+            done={completed.has(topic.id)}
+            current={topic.id === currentTopicId}
+          />
+        ))}
       </View>
     </View>
   );
+}
+
+function TopicRow({ topic, done, current }: { topic: Topic; done: boolean; current: boolean }) {
+  return (
+    <View style={[styles.topicRow, current && styles.topicCurrent]}>
+      <View style={[styles.topicDot, done && styles.topicDotDone]}>
+        <Text style={styles.topicDotText}>{done ? "✓" : topic.order}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.topicTitle}>{topic.title}</Text>
+        {topic.description ? <Text style={styles.topicDesc}>{topic.description}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 const styles = StyleSheet.create({
@@ -93,7 +121,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: spacing.xl },
-  muted: { fontSize: fontSize.bodyMd, color: colors.textSecondary },
+  muted: { fontSize: fontSize.bodyMd, color: colors.textSecondary, textAlign: "center" },
   pctLabel: {
     fontSize: fontSize.labelLg,
     fontWeight: fontWeight.semibold,
@@ -112,7 +140,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
   },
-  stageRow: {
+  levelHeading: {
+    fontSize: fontSize.labelLg,
+    fontWeight: fontWeight.semibold,
+    color: colors.textSecondary,
+  },
+  topicRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
@@ -122,8 +155,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.md,
   },
-  stageCurrent: { borderColor: colors.accent, borderWidth: 2 },
-  stageDot: {
+  topicCurrent: { borderColor: colors.accent, borderWidth: 2 },
+  topicDot: {
     width: 28,
     height: 28,
     borderRadius: radius.full,
@@ -131,18 +164,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  stageDotDone: { backgroundColor: colors.success },
-  stageDotText: {
+  topicDotDone: { backgroundColor: colors.success },
+  topicDotText: {
     fontSize: fontSize.labelMd,
     fontWeight: fontWeight.bold,
     color: colors.textPrimary,
   },
-  stageTitle: {
+  topicTitle: {
     fontSize: fontSize.titleMd,
     fontWeight: fontWeight.semibold,
     color: colors.textPrimary,
   },
-  stageDesc: {
+  topicDesc: {
     fontSize: fontSize.bodySm,
     color: colors.textSecondary,
     marginTop: 2,

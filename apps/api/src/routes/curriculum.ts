@@ -3,32 +3,27 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncRoute } from '../middleware/error-handler.js';
 import { HttpApiError } from '../lib/errors.js';
+import { toLevelDto, toTopicDto } from '../lib/dto.js';
 
 export const curriculumRouter = Router();
 
-function toStageDto(stage: {
-  id: string;
-  order: number;
-  title: string;
-  description: string | null;
-  track: string | null;
-}) {
-  return {
-    id: stage.id,
-    order: stage.order,
-    title: stage.title,
-    description: stage.description,
-    track: stage.track,
-  };
-}
-
-// GET /curriculum/stages
+// GET /curriculum/levels[?stage] — every level, each with its topics, ordered.
 curriculumRouter.get(
-  '/stages',
+  '/levels',
   requireAuth,
-  asyncRoute(async (_req, res) => {
-    const stages = await prisma.curriculumStage.findMany({ orderBy: { order: 'asc' } });
-    res.json(stages.map(toStageDto));
+  asyncRoute(async (req, res) => {
+    const stage = req.query.stage as string | undefined;
+    const levels = await prisma.level.findMany({
+      where: stage ? { stage: stage as never } : undefined,
+      include: { topics: { orderBy: { order: 'asc' } } },
+      orderBy: [{ stage: 'asc' }, { order: 'asc' }],
+    });
+    res.json(
+      levels.map((l: (typeof levels)[number]) => ({
+        ...toLevelDto(l),
+        topics: l.topics.map(toTopicDto),
+      })),
+    );
   }),
 );
 
@@ -51,31 +46,47 @@ curriculumRouter.get(
 
     const student = await prisma.student.findUnique({
       where: { userId: studentUserId },
-      include: { currentStage: true },
+      include: { currentTopic: { include: { level: true } } },
     });
     if (!student) throw new HttpApiError('not_found', 'Student not found.');
 
-    const trackStages = await prisma.curriculumStage.findMany({
-      where: { track: student.track },
-      orderBy: { order: 'asc' },
-    });
+    // Every level+topic in the student's current stage, so the client can
+    // render "where they are" without a second round trip. If they haven't
+    // started anything yet, default to the whole curriculum (all stages)
+    // being unknown — front end should prompt to set a starting topic.
+    const currentStage = student.currentTopic?.level.stage ?? null;
+    const stageLevels = currentStage
+      ? await prisma.level.findMany({
+          where: { stage: currentStage },
+          include: { topics: { orderBy: { order: 'asc' } } },
+          orderBy: { order: 'asc' },
+        })
+      : [];
 
-    const currentOrder = student.currentStage?.order ?? 0;
-    const completedStageIds = trackStages
-      .filter((s: { order: number }) => s.order < currentOrder)
-      .map((s: { id: string }) => s.id);
-
-    const percentComplete =
-      trackStages.length === 0 ? 0 : Math.round((completedStageIds.length / trackStages.length) * 100);
+    const allTopicsInStage = stageLevels.flatMap((l: (typeof stageLevels)[number]) =>
+      l.topics.map((t: (typeof l.topics)[number]) => ({ ...t, levelOrder: l.order })),
+    );
+    const currentIndex = allTopicsInStage.findIndex(
+      (t: (typeof allTopicsInStage)[number]) => t.id === student.currentTopicId,
+    );
+    const completedTopicIds =
+      currentIndex >= 0 ? allTopicsInStage.slice(0, currentIndex).map((t: (typeof allTopicsInStage)[number]) => t.id) : [];
 
     res.json({
       studentId: student.userId,
-      currentStageId: student.currentStageId,
-      currentStageOrder: currentOrder,
-      totalStages: trackStages.length,
-      completedStageIds,
-      percentComplete,
-      stages: trackStages.map(toStageDto),
+      currentStage,
+      currentTopicId: student.currentTopicId,
+      currentLevelId: student.currentTopic?.levelId ?? null,
+      totalTopicsInStage: allTopicsInStage.length,
+      completedTopicIds,
+      percentComplete:
+        allTopicsInStage.length === 0
+          ? 0
+          : Math.round((completedTopicIds.length / allTopicsInStage.length) * 100),
+      levels: stageLevels.map((l: (typeof stageLevels)[number]) => ({
+        ...toLevelDto(l),
+        topics: l.topics.map(toTopicDto),
+      })),
     });
   }),
 );

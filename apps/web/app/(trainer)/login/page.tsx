@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { controlClasses, Field } from "@/components/ui/Field";
+import { Logo } from "@/components/ui/Logo";
 import { useAuth } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -21,7 +22,13 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const user = await signIn(schoolId.trim(), password);
-      router.replace(user.mustChangePassword ? "/change-password" : "/report");
+      if (user.mustChangePassword) {
+        router.replace("/change-password");
+      } else if (user.role === "admin") {
+        router.replace("/admin/dashboard");
+      } else {
+        router.replace("/report");
+      }
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
@@ -35,9 +42,7 @@ export default function LoginPage() {
     <div className="flex min-h-dvh flex-col md:flex-row">
       {/* Brand panel — hidden on small screens to keep the form the focus there. */}
       <div className="hidden flex-col justify-between bg-primary p-2xl text-white md:flex md:w-2/5">
-        <span className="font-display text-title-lg font-semibold tracking-tight">
-          Rubies Code School
-        </span>
+        <Logo size="lg" onDark />
         <div className="max-w-[20rem]">
           <p className="font-display text-headline-lg font-semibold leading-tight">
             Trainer console
@@ -53,9 +58,7 @@ export default function LoginPage() {
       <div className="flex flex-1 items-center justify-center p-lg">
         <form onSubmit={onSubmit} className="w-full max-w-[24rem]">
           <div className="mb-xl md:hidden">
-            <span className="font-display text-title-lg font-semibold text-primary">
-              Rubies Code School
-            </span>
+            <Logo size="sm" />
           </div>
 
           <h1 className="font-display text-headline-md font-bold text-text-primary">

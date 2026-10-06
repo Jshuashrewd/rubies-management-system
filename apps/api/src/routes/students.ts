@@ -7,7 +7,7 @@ import { toStudentDto } from '../lib/dto.js';
 
 export const studentsRouter = Router();
 
-// GET /trainer/students — students in any cohort/track the trainer teaches.
+// GET /trainer/students — students on any ClassSchedule this trainer teaches.
 studentsRouter.get(
   '/trainer/students',
   requireAuth,
@@ -15,26 +15,13 @@ studentsRouter.get(
   asyncRoute(async (req, res) => {
     const trainer = await prisma.trainer.findUniqueOrThrow({ where: { userId: req.user!.id } });
 
-    const sessions = await prisma.classSession.findMany({
-      where: { trainerId: trainer.id },
-      select: { cohort: true, track: true },
-      distinct: ['cohort', 'track'],
+    const links = await prisma.classScheduleStudent.findMany({
+      where: { classSchedule: { trainerId: trainer.id } },
+      select: { studentId: true },
+      distinct: ['studentId'],
     });
 
-    if (sessions.length === 0) return res.json([]);
-
-    const students = await prisma.student.findMany({
-      where: {
-        OR: sessions.map((s: { cohort: string; track: string | null }) => ({
-          cohort: s.cohort,
-          track: s.track ?? undefined,
-        })),
-      },
-    });
-
-    const dtos = await Promise.all(
-      students.map((s: { userId: string }) => toStudentDto(s.userId)),
-    );
+    const dtos = await Promise.all(links.map((l: (typeof links)[number]) => toStudentDto(l.studentId)));
     res.json(dtos);
   }),
 );
@@ -50,8 +37,8 @@ studentsRouter.get(
 
     if (req.user!.role === 'trainer') {
       const trainer = await prisma.trainer.findUniqueOrThrow({ where: { userId: req.user!.id } });
-      const teachesThem = await prisma.classSession.findFirst({
-        where: { trainerId: trainer.id, cohort: student.cohort, track: student.track },
+      const teachesThem = await prisma.classScheduleStudent.findFirst({
+        where: { studentId: student.userId, classSchedule: { trainerId: trainer.id } },
       });
       if (!teachesThem) {
         throw new HttpApiError('forbidden', 'This student is not assigned to you.');

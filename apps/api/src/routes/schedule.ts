@@ -3,36 +3,30 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncRoute } from '../middleware/error-handler.js';
 import { HttpApiError } from '../lib/errors.js';
-import { toClassSessionDto } from '../lib/dto.js';
+import { classSessionInclude, toClassSessionDto } from '../lib/dto.js';
 
 export const scheduleRouter = Router();
 
-const includeTrainer = { trainer: { include: { user: true } } } as const;
-
-// GET /schedule — student: their cohort/track's classes; trainer: classes they teach.
+// GET /schedule — student: sessions their ClassSchedule links include them
+// on; trainer: sessions on ClassSchedules they teach; admin: everything.
 scheduleRouter.get(
   '/',
   requireAuth,
   asyncRoute(async (req, res) => {
     if (req.user!.role === 'student') {
-      const student = await prisma.student.findUniqueOrThrow({
-        where: { userId: req.user!.id },
-      });
       const sessions = await prisma.classSession.findMany({
-        where: { cohort: student.cohort, track: student.track },
-        include: includeTrainer,
+        where: { classSchedule: { students: { some: { studentId: req.user!.id } } } },
+        include: classSessionInclude,
         orderBy: { scheduledStartAt: 'asc' },
       });
       return res.json(sessions.map(toClassSessionDto));
     }
 
     if (req.user!.role === 'trainer') {
-      const trainer = await prisma.trainer.findUniqueOrThrow({
-        where: { userId: req.user!.id },
-      });
+      const trainer = await prisma.trainer.findUniqueOrThrow({ where: { userId: req.user!.id } });
       const sessions = await prisma.classSession.findMany({
-        where: { trainerId: trainer.id },
-        include: includeTrainer,
+        where: { classSchedule: { trainerId: trainer.id } },
+        include: classSessionInclude,
         orderBy: { scheduledStartAt: 'asc' },
       });
       return res.json(sessions.map(toClassSessionDto));
@@ -40,7 +34,7 @@ scheduleRouter.get(
 
     // Admin: all sessions.
     const sessions = await prisma.classSession.findMany({
-      include: includeTrainer,
+      include: classSessionInclude,
       orderBy: { scheduledStartAt: 'asc' },
     });
     res.json(sessions.map(toClassSessionDto));
@@ -54,24 +48,20 @@ scheduleRouter.get(
   asyncRoute(async (req, res) => {
     const session = await prisma.classSession.findUnique({
       where: { id: req.params.id },
-      include: includeTrainer,
+      include: classSessionInclude,
     });
     if (!session) throw new HttpApiError('not_found', 'Class not found.');
 
-    // Authorization: a student may only view classes for their own cohort/track;
-    // a trainer only their own sessions. Admin sees everything.
     if (req.user!.role === 'student') {
-      const student = await prisma.student.findUniqueOrThrow({
-        where: { userId: req.user!.id },
-      });
-      if (session.cohort !== student.cohort || session.track !== student.track) {
+      const onThisClass = session.classSchedule.students.some(
+        (link: (typeof session.classSchedule.students)[number]) => link.student.userId === req.user!.id,
+      );
+      if (!onThisClass) {
         throw new HttpApiError('forbidden', 'This class is not on your schedule.');
       }
     } else if (req.user!.role === 'trainer') {
-      const trainer = await prisma.trainer.findUniqueOrThrow({
-        where: { userId: req.user!.id },
-      });
-      if (session.trainerId !== trainer.id) {
+      const trainer = await prisma.trainer.findUniqueOrThrow({ where: { userId: req.user!.id } });
+      if (session.classSchedule.trainerId !== trainer.id) {
         throw new HttpApiError('forbidden', 'This class is not assigned to you.');
       }
     }

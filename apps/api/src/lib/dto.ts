@@ -30,12 +30,11 @@ export async function toStudentDto(userId: string) {
   return {
     ...(await toUserDto(user)),
     role: 'student' as const,
-    cohort: user.student.cohort,
-    track: user.student.track,
     guardianName: user.student.guardianName,
     guardianEmail: user.student.guardianEmail,
-    currentStageId: user.student.currentStageId,
+    currentTopicId: user.student.currentTopicId,
     strictModePasscodeSet: user.student.strictModePasscodeHash !== null,
+    strictModeEnabled: user.student.strictModeEnabled,
   };
 }
 
@@ -53,34 +52,79 @@ export async function toTrainerDto(userId: string) {
   };
 }
 
-export function toClassSessionDto(session: {
+export function toLevelDto(level: {
   id: string;
+  stage: string;
+  order: number;
   title: string;
   description: string | null;
-  trainerId: string;
-  trainer: { user: { firstName: string; lastName: string } };
-  cohort: string;
-  track: string | null;
-  curriculumStageId: string | null;
+}) {
+  return {
+    id: level.id,
+    stage: level.stage,
+    order: level.order,
+    title: level.title,
+    description: level.description,
+  };
+}
+
+export function toTopicDto(topic: {
+  id: string;
+  levelId: string;
+  order: number;
+  title: string;
+  description: string | null;
+}) {
+  return {
+    id: topic.id,
+    levelId: topic.levelId,
+    order: topic.order,
+    title: topic.title,
+    description: topic.description,
+  };
+}
+
+export function toClassSessionDto(session: {
+  id: string;
+  classScheduleId: string;
+  topicId: string | null;
   scheduledStartAt: Date;
   scheduledEndAt: Date;
   status: string;
-  zoomJoinUrl: string;
-  zoomMeetingId: string | null;
+  classSchedule: {
+    title: string;
+    trainerId: string;
+    trainer: { user: { firstName: string; lastName: string } };
+    zoomJoinUrl: string;
+    students: { student: { userId: string; user: { firstName: string; lastName: string } } }[];
+  };
 }) {
   return {
     id: session.id,
-    title: session.title,
-    description: session.description,
-    trainerId: session.trainerId,
-    trainerName: `${session.trainer.user.firstName} ${session.trainer.user.lastName}`,
-    cohort: session.cohort,
-    track: session.track,
-    curriculumStageId: session.curriculumStageId,
+    classScheduleId: session.classScheduleId,
+    title: session.classSchedule.title,
+    trainerId: session.classSchedule.trainerId,
+    trainerName: `${session.classSchedule.trainer.user.firstName} ${session.classSchedule.trainer.user.lastName}`,
+    topicId: session.topicId,
+    students: session.classSchedule.students.map((link) => ({
+      id: link.student.userId,
+      firstName: link.student.user.firstName,
+      lastName: link.student.user.lastName,
+    })),
     scheduledStartAt: session.scheduledStartAt.toISOString(),
     scheduledEndAt: session.scheduledEndAt.toISOString(),
     status: session.status,
-    zoomJoinUrl: session.zoomJoinUrl,
-    zoomMeetingId: session.zoomMeetingId,
+    zoomJoinUrl: session.classSchedule.zoomJoinUrl,
   };
 }
+
+/** Prisma `include` shared by every query that returns a ClassSession, so
+ * the shape toClassSessionDto expects is always present. */
+export const classSessionInclude = {
+  classSchedule: {
+    include: {
+      trainer: { include: { user: true } },
+      students: { include: { student: { include: { user: true } } } },
+    },
+  },
+} as const;

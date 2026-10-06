@@ -19,3 +19,8 @@ export function formatDay(iso: string): string {
 export function minutesUntil(iso: string): number {
   return Math.round((new Date(iso).getTime() - Date.now()) / 60_000);
 }
+
+/** Combined day + time, for admin tables that need both at a glance. */
+export function formatDateTime(iso: string): string {
+  return `${formatDay(iso)}, ${formatTime(iso)}`;
+}
