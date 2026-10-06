@@ -5,6 +5,12 @@
  * Uses the global `fetch` (available in React Native, Next.js, and Node 20+).
  */
 import type {
+  AdminCreateClassScheduleInput,
+  AdminCreateClassScheduleResponse,
+  AdminCreateLevelInput,
+  AdminCreateTopicInput,
+  AdminCreateUserInput,
+  AdminUpdateClassSessionInput,
   ApiErrorBody,
   ApiErrorCode,
   ChangePasswordRequest,
@@ -12,8 +18,9 @@ import type {
   ClassSession,
   CreateReportInput,
   CurriculumProgress,
-  CurriculumStage,
   JoinEvent,
+  Level,
+  LevelWithTopics,
   LogJoinInput,
   LoginRequest,
   LoginResponse,
@@ -22,6 +29,8 @@ import type {
   StrictModeActivateInput,
   StrictModeEvent,
   StrictModeReleaseInput,
+  Topic,
+  ToggleStrictModeInput,
   User,
   VerifyPasscodeInput,
   VerifyPasscodeResponse,
@@ -93,13 +102,18 @@ export function createApiClient(options: ApiClientOptions) {
     me: () => request<User>('GET', '/me'),
 
     schedule: {
-      /** Classes for the current user (student: enrolled, trainer: assigned). */
+      /** Sessions for the current user (student: booked on, trainer: teaching). */
       list: () => request<ClassSession[]>('GET', '/schedule'),
       get: (classId: string) => request<ClassSession>('GET', `/classes/${classId}`),
     },
 
     curriculum: {
-      stages: () => request<CurriculumStage[]>('GET', '/curriculum/stages'),
+      /** Every Level with its Topics, optionally filtered to one Stage. */
+      levels: (stage?: string) =>
+        request<LevelWithTopics[]>(
+          'GET',
+          stage ? `/curriculum/levels?stage=${encodeURIComponent(stage)}` : '/curriculum/levels',
+        ),
       /** Omit studentId for the current student; pass it for a trainer view. */
       progress: (studentId?: string) =>
         request<CurriculumProgress>(
@@ -111,7 +125,7 @@ export function createApiClient(options: ApiClientOptions) {
     },
 
     students: {
-      /** Trainer: the students assigned to the current trainer. */
+      /** Trainer: the students on any schedule the current trainer teaches. */
       assigned: () => request<Student[]>('GET', '/trainer/students'),
       get: (studentId: string) => request<Student>('GET', `/students/${studentId}`),
     },
@@ -141,6 +155,51 @@ export function createApiClient(options: ApiClientOptions) {
     strictMode: {
       verifyPasscode: (b: VerifyPasscodeInput) =>
         request<VerifyPasscodeResponse>('POST', '/strict-mode/verify-passcode', b),
+      /** Parent turns Strict Mode on/off by re-entering the admin-issued passcode. */
+      enable: (b: ToggleStrictModeInput) => request<Student>('POST', '/strict-mode/enable', b),
+      disable: (b: ToggleStrictModeInput) => request<Student>('POST', '/strict-mode/disable', b),
+    },
+
+    /** Admin console only — every route here requires role: 'admin' on the backend. */
+    admin: {
+      users: {
+        list: () => request<User[]>('GET', '/admin/users'),
+        create: (b: AdminCreateUserInput) => request<User>('POST', '/admin/users', b),
+        /** Regenerates the default password (lowercase surname) and forces a change on next login. */
+        resetPassword: (userId: string) =>
+          request<User>('POST', `/admin/users/${userId}/reset-password`),
+      },
+
+      /** Stage -> Level -> Topic. Stages are fixed; admin creates Levels and Topics. */
+      levels: {
+        list: (stage?: string) =>
+          request<LevelWithTopics[]>(
+            'GET',
+            stage ? `/admin/levels?stage=${encodeURIComponent(stage)}` : '/admin/levels',
+          ),
+        create: (b: AdminCreateLevelInput) => request<Level>('POST', '/admin/levels', b),
+      },
+      topics: {
+        create: (b: AdminCreateTopicInput) => request<Topic>('POST', '/admin/topics', b),
+      },
+
+      /** Creates a recurring booking and generates every ClassSession in range (max 60). */
+      classSchedules: {
+        create: (b: AdminCreateClassScheduleInput) =>
+          request<AdminCreateClassScheduleResponse>('POST', '/admin/class-schedules', b),
+      },
+      classSessions: {
+        updateStatus: (classId: string, b: AdminUpdateClassSessionInput) =>
+          request<ClassSession>('PATCH', `/admin/class-sessions/${classId}`, b),
+      },
+
+      students: {
+        /** Sets/updates the parent-facing Strict Mode passcode (4–6 digits). */
+        setStrictModePasscode: (studentUserId: string, passcode: string) =>
+          request<{ success: true }>('POST', `/admin/students/${studentUserId}/strict-mode-passcode`, {
+            passcode,
+          }),
+      },
     },
   };
 }

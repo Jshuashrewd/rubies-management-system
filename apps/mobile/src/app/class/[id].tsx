@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
+import { Redirect, useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
   Linking,
@@ -9,36 +9,64 @@ import {
   View,
 } from "react-native";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { formatDay, formatTime } from "@/lib/format";
+import { useReminders } from "@/lib/reminders";
 import { colors, fontSize, fontWeight, spacing } from "@/lib/theme";
 
 export default function ClassDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { cancelForClass } = useReminders();
+  const { user, isLoading } = useAuth();
   const q = useQuery({
     queryKey: ["class", id],
     queryFn: () => api.schedule.get(id),
-    enabled: !!id,
+    enabled: !!id && !!user,
   });
 
   async function onJoin() {
     const session = q.data;
     if (!session) return;
-    // Log the join (attendance signal). Don't block the Zoom hand-off on it.
-    // The backend also cancels this class's pending reminders on join.
-    try {
-      await api.events.join({ classId: session.id });
-    } catch {
-      // ignore — joining Zoom matters more than the log
+
+    // Log the join (attendance signal), but never let a slow network hold up
+    // Zoom: give it 2s, then move on. Some mobile connections hang for
+    // a long time rather than failing fast.
+    await Promise.race([
+      api.events.join({ classId: session.id }).catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
+
+    // Joined -> stop the alarms. Only when class is close: tapping the link on
+    // a class days away (e.g. to check it) must not silence its future alarms.
+    const minsToStart = (new Date(session.scheduledStartAt).getTime() - Date.now()) / 60_000;
+    if (minsToStart <= 60) {
+      try {
+        await cancelForClass(session.id);
+      } catch {
+        // best effort — worst case one more alarm fires
+      }
     }
+
     try {
       await Linking.openURL(session.zoomJoinUrl);
     } catch {
       // ignore — URL may be invalid in the scaffold
     }
   }
+
+  // This is a root-level screen, so nothing above it checks for a session.
+  // Signed out (or opened with no class id) must never show a broken screen.
+  if (isLoading) {
+    return (
+      <Screen>
+        <ActivityIndicator color={colors.primary} />
+      </Screen>
+    );
+  }
+  if (!user) return <Redirect href="/login" />;
+  if (!id) return <Redirect href="/" />;
 
   if (q.isLoading) {
     return (
@@ -70,12 +98,6 @@ export default function ClassDetail() {
           {formatTime(s.scheduledEndAt)}
         </Text>
         <Text style={styles.meta}>with {s.trainerName}</Text>
-
-        {s.description ? (
-          <Card style={{ marginTop: spacing.lg }}>
-            <Text style={styles.body}>{s.description}</Text>
-          </Card>
-        ) : null}
 
         <Button
           label="Join on Zoom"

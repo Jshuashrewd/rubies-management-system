@@ -8,6 +8,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { roleBadge } from "@rubies/shared";
+import { Logo } from "@/components/ui/Logo";
 import { useAuth } from "@/lib/auth";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -44,10 +45,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas-tint">
-      <header className="flex items-center justify-between border-b border-border bg-canvas px-lg py-sm">
-        <span className="font-display text-title-md font-semibold text-primary">
-          Rubies Code School
-        </span>
+      <header className="flex items-center justify-between border-b border-border bg-canvas px-lg py-sm shadow-sm">
+        <Logo size="sm" />
 
         <div className="flex items-center gap-sm">
           <span

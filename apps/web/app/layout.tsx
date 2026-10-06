@@ -23,8 +23,14 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Rubies Code School — Trainer",
-  description: "Class reporting, schedule, and curriculum tracking for trainers.",
+  title: "Rubies Code School",
+  description: "Class reporting, scheduling, curriculum tracking, and administration for Rubies Code School.",
+  icons: {
+    // Next.js serves PNGs as favicons fine — no .ico conversion needed.
+    // Falls back to the existing app/favicon.ico automatically if
+    // /public/logo.png hasn't been added yet (file-not-found, not an error).
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -1,0 +1,261 @@
+// Rubies Code School — database schema.
+// Mirrors packages/shared/src/types.ts exactly. If you change a field here,
+// the contract (types.ts) and this file must be updated together.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  student
+  trainer
+  admin
+}
+
+/** Fixed by the academy's curriculum design — not admin-creatable. */
+enum Stage {
+  scratch
+  creator
+  innovator
+}
+
+enum ClassStatus {
+  scheduled
+  live
+  ended
+  cancelled
+}
+
+enum AttendanceStatus {
+  present
+  late
+  absent
+}
+
+enum ReportStatus {
+  draft
+  submitted
+  sent
+}
+
+enum StrictModeEventType {
+  activated
+  released
+}
+
+enum StrictModeReleaseReason {
+  scheduled_end
+  class_joined
+  passcode_override
+}
+
+enum StrictModeSource {
+  auto
+  parent
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  schoolId           String   @unique // e.g. "RCS-STU-2025-884"
+  role               Role
+  firstName          String
+  lastName           String
+  email              String?
+  passwordHash       String
+  mustChangePassword Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  // Role-specific profile rows (only one will exist, matching `role`)
+  student Student?
+  trainer Trainer?
+
+  @@map("users")
+}
+
+model Student {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guardianName           String?
+  guardianEmail          String
+  currentTopicId         String?
+  currentTopic           Topic?   @relation(fields: [currentTopicId], references: [id])
+  strictModePasscodeHash String?  // null until a parent sets one
+  /** Whether the parent has turned Strict Mode ON for this student. The app
+   * only auto-locks near class time when this is true — separate from
+   * whether a passcode has been set (see strictModePasscodeHash). */
+  strictModeEnabled      Boolean  @default(false)
+
+  classScheduleLinks ClassScheduleStudent[]
+  joinEvents         JoinEvent[]
+  reports            Report[]
+  strictModeEvents   StrictModeEvent[]
+
+  @@map("students")
+}
+
+model Trainer {
+  id     String  @id @default(cuid())
+  userId String  @unique
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title  String?
+
+  classSchedules ClassSchedule[]
+  reports        Report[]
+
+  @@map("trainers")
+}
+
+/**
+ * One level within a Stage (e.g. Scratch → "Level 2"). Admin-created.
+ * `order` is the position within its Stage — auto-advance (see Report)
+ * moves to the next Level's first Topic once a Level's last Topic
+ * is completed.
+ */
+model Level {
+  id          String  @id @default(cuid())
+  stage       Stage
+  order       Int
+  title       String
+  description String?
+
+  topics Topic[]
+
+  @@unique([stage, order])
+  @@map("levels")
+}
+
+/**
+ * One topic within a Level (e.g. "Sprite Movement"). Admin-created.
+ * `order` is the position within its Level.
+ */
+model Topic {
+  id          String  @id @default(cuid())
+  levelId     String
+  level       Level   @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  order       Int
+  title       String
+  description String?
+
+  studentsCurrent Student[]
+  reports         Report[]
+  classSessions   ClassSession[]
+
+  @@unique([levelId, order])
+  @@map("topics")
+}
+
+/**
+ * A recurring booking: one trainer, one or more students, on a set of
+ * weekdays at a fixed time/duration, across a date range. Creating one
+ * generates the individual ClassSession rows for every matching day
+ * (see POST /admin/class-schedules) — the schedule itself is not shown
+ * to trainers/students directly, only the sessions it produced.
+ */
+model ClassSchedule {
+  id               String   @id @default(cuid())
+  title            String
+  trainerId        String
+  trainer          Trainer  @relation(fields: [trainerId], references: [id])
+  /** 0 = Sunday … 6 = Saturday, matching JS Date#getDay(). */
+  daysOfWeek       Int[]
+  /** Minutes since midnight, in the school's local time. */
+  startMinuteOfDay Int
+  durationMinutes  Int
+  startDate        DateTime @db.Date
+  endDate           DateTime @db.Date
+  zoomJoinUrl      String
+  /** Informational only — no automatic credit deduction. */
+  paidThroughNote  String?
+  createdAt        DateTime @default(now())
+
+  students ClassScheduleStudent[]
+  sessions ClassSession[]
+
+  @@map("class_schedules")
+}
+
+model ClassScheduleStudent {
+  classScheduleId String
+  classSchedule   ClassSchedule @relation(fields: [classScheduleId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         Student       @relation(fields: [studentId], references: [userId], onDelete: Cascade)
+
+  @@id([classScheduleId, studentId])
+  @@map("class_schedule_students")
+}
+
+model ClassSession {
+  id               String        @id @default(cuid())
+  classScheduleId  String
+  classSchedule    ClassSchedule @relation(fields: [classScheduleId], references: [id], onDelete: Cascade)
+  /** Which topic this occurrence covers — defaults from the schedule but
+   * may drift per-session as students progress; nullable if unset. */
+  topicId          String?
+  topic            Topic?        @relation(fields: [topicId], references: [id])
+  scheduledStartAt DateTime
+  scheduledEndAt   DateTime
+  status           ClassStatus   @default(scheduled)
+
+  joinEvents       JoinEvent[]
+  reports          Report[]
+  strictModeEvents StrictModeEvent[]
+
+  @@map("class_sessions")
+}
+
+model Report {
+  id              String           @id @default(cuid())
+  classId         String
+  classSession    ClassSession     @relation(fields: [classId], references: [id])
+  studentId       String
+  student         Student          @relation(fields: [studentId], references: [userId])
+  trainerId       String
+  trainer         Trainer          @relation(fields: [trainerId], references: [id])
+  status          ReportStatus     @default(draft)
+  attendance      AttendanceStatus
+  participation   Int
+  topicId         String
+  topic           Topic            @relation(fields: [topicId], references: [id])
+  topicCompleted  Boolean          @default(false)
+  topicsCovered   String
+  strengths       String
+  areasToImprove  String
+  homework        String?
+  trainerComments String
+  submittedAt     DateTime?
+  createdAt       DateTime         @default(now())
+
+  @@map("reports")
+}
+
+model JoinEvent {
+  id           String       @id @default(cuid())
+  studentId    String
+  student      Student      @relation(fields: [studentId], references: [userId])
+  classId      String
+  classSession ClassSession @relation(fields: [classId], references: [id])
+  joinedAt     DateTime     @default(now())
+  source       String       @default("zoom_deeplink")
+
+  @@map("join_events")
+}
+
+model StrictModeEvent {
+  id           String                   @id @default(cuid())
+  studentId    String
+  student      Student                  @relation(fields: [studentId], references: [userId])
+  classId      String?
+  classSession ClassSession?            @relation(fields: [classId], references: [id])
+  type         StrictModeEventType
+  reason       StrictModeReleaseReason?
+  source       StrictModeSource
+  at           DateTime                 @default(now())
+
+  @@map("strict_mode_events")
+}
